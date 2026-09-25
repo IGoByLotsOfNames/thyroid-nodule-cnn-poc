@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thyroid-nodule-cnn-poc"
+version = "1.0.0"
+description = "Reproducible CNN proof of concept for thyroid-nodule ultrasound classification"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+authors = [{name = "Jirapas Wongtreenatrkoon"}]
+dependencies = [
+  "tensorflow>=2.15,<2.18",
+  "numpy>=1.26,<3",
+  "scikit-learn>=1.4,<2",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

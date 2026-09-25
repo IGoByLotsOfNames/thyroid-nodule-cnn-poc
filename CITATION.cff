@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this research software, please cite it as below."
+title: "Thyroid Nodule CNN Proof of Concept"
+type: software
+authors:
+  - family-names: Wongtreenatrkoon
+    given-names: Jirapas
+version: 1.0.0
+date-released: 2026-09-25
+

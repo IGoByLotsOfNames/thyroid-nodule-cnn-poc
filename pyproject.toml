@@ -4,17 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thyroid-nodule-cnn-poc"
-version = "1.0.0"
-description = "Reproducible CNN proof of concept for thyroid-nodule ultrasound classification"
+version = "2.0.0"
+description = "Binary image research pipeline with validated split and model contracts"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.14"
 authors = [{name = "Jirapas Wongtreenatrkoon"}]
-dependencies = [
-  "tensorflow>=2.15,<2.18",
-  "numpy>=1.26,<3",
-  "scikit-learn>=1.4,<2",
-]
+dependencies = ["numpy>=2,<2.3", "Pillow>=12,<13"]
+
+[project.optional-dependencies]
+runtime = ["tensorflow==2.20.0", "keras==3.15.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-

@@ -1,92 +1,104 @@
 # Thyroid Nodule CNN Proof of Concept
 
-This repository presents a reproducible proof-of-concept study investigating whether convolutional neural networks can distinguish benign and malignant thyroid-nodule ultrasound images.
+A research project exploring CNN classification of thyroid ultrasound images, now accompanied by a tested pipeline for dataset provenance, training and reproducible evaluation.
 
-The work covers image preparation, stratified train/validation/test splitting, multiple CNN architectures, probability averaging and evaluation with confusion matrices, classification metrics and ROC AUC. It is a research prototype and **must not be used for diagnosis or clinical decision-making**.
+I led the original proof-of-concept work: reviewing related research, building CNN models on public/Kaggle images and comparing individual models and ensembles. This repository separates that historical study from the maintained software. It contains **no hospital images, private submission system or clinical validation**.
 
-## Results retained from the study
+## Explore the work
 
-| Experiment | Accuracy | ROC AUC | Test support |
-|---|---:|---:|---:|
-| Cropped-image ensemble | 0.88 | 0.882 | 502 |
-| Uncropped-image ensemble | 0.93 | 0.925 | 482 |
+- [Historical study and its limitations](#historical-study): what the early results actually show.
+- [Dataset pipeline](src/thyroid_poc/data.py): deterministic group-aware splitting, exact-duplicate checks and immutable manifests.
+- [Evaluation](src/thyroid_poc/evaluate.py) and [metrics](src/thyroid_poc/metrics.py): per-image probabilities, model hashes, confusion matrices, probability ROC AUC and ensemble results.
+- [Tests](tests): synthetic regression tests and real TensorFlow train/save/reload smoke tests.
+- [Data statement](DATA.md) and [model card](MODEL_CARD.md): provenance, intended use and unresolved evidence.
 
-These figures come from stored experiment reports in the original proof-of-concept archive. They describe those specific dataset splits and do not establish clinical validity or generalization to another hospital, device or patient population.
-
-![Uncropped ensemble classification report](results/uncropped-ensemble-classification-report.png)
-
-## Repository boundaries
-
-Included:
-
-- Reconstructed, environment-independent training and evaluation utilities
-- Model builders for AlexNet, InceptionV3 and InceptionResNetV2
-- Dataset-splitting code that copies rather than mutates source data
-- Evaluation reports and the proof-of-concept journal
-
-Excluded:
-
-- Ultrasound images and patient-linked metadata
-- Hospital data and private data-submission infrastructure
-- Trained model files and serialized datasets
-- Historical scripts containing local paths and repeated experimental code
-
-## Data layout
-
-Prepare a binary image dataset with one directory per class, then split it:
+## Maintained implementation
 
 ```text
-dataset/
-├── benign/
-└── malignant/
+Authorized class directories + group CSV
+            │
+      hash and validate
+            ▼
+ immutable train / validation / test manifest
+            │
+ train + validation only ──► .keras + metadata + history
+            │
+ held-out test ──► aligned probabilities ──► individual / mean-ensemble report
 ```
 
-The training commands expect:
+The pipeline keeps every explicit group and connected exact-byte duplicate in one partition. It rejects conflicting duplicate labels, incomplete group mappings, tiny class groups, existing destinations, changed files and untracked files. Splits use sorted inputs and a recorded seed. Ratios are approximate because patient/case groups are indivisible; every partition must contain both classes.
 
-```text
-split-data/
-├── train/{benign,malignant}/
-├── validation/{benign,malignant}/
-└── test/{benign,malignant}/
-```
+The three model builders are an AlexNet-style CNN, InceptionV3 and InceptionResNetV2. RGB conversion and bilinear resizing are shared; normalization lives inside the serialized model. Transfer models can explicitly download ImageNet weights and freeze the backbone, or train a randomly initialized backbone. This implementation is a reconstruction, **not the exact four-model code used for the archived figures**.
 
-The original proof of concept used a public Kaggle dataset. Review `DATA.md` before reproducing the study and comply with the dataset's current licence and terms.
+## Reproduce the software checks
 
-## Environment
+Python 3.12 is the tested runtime. No data or pretrained weights are downloaded by the tests.
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# Activate: Windows .venv\Scripts\activate; macOS/Linux source .venv/bin/activate
 python -m pip install -e .
+python -m unittest discover -s tests -v
 ```
 
-## Train and evaluate
+The default suite needs NumPy/Pillow only and skips the two TensorFlow tests. For actual CPU model execution:
 
 ```bash
-python -m thyroid_poc.train split-data --architecture inception_v3 --epochs 30
-python -m thyroid_poc.evaluate artifacts/model.keras split-data
+python -m pip install -r requirements-runtime.txt
+# PowerShell: $env:RUN_ML_TESTS="1"; $env:TF_ENABLE_ONEDNN_OPTS="0"
+# macOS/Linux: export RUN_ML_TESTS=1 TF_ENABLE_ONEDNN_OPTS=0
+python -m unittest discover -s tests -v
 ```
 
-For an ensemble:
+The runtime suite builds and forwards all three architectures with random weights, trains an AlexNet-style model for two epochs on generated colour images, saves/reloads it, verifies predictions, and produces individual/ensemble evaluation artifacts in temporary storage. **Synthetic checks establish software behaviour, not ultrasound accuracy.** See [validation record](docs/validation.md) for the tested environment and limitations.
+
+## Use an authorized dataset
+
+Read [DATA.md](DATA.md) first. The dataset root needs two class directories; their sorted names define class indices 0 and 1. A sigmoid output is always the probability of the second class, recorded in metadata and reports.
+
+```text
+dataset/benign/case001.png
+dataset/malignant/case002.png
+```
+
+Provide `groups.csv`, covering exactly every supported image. Use an opaque patient/case ID that keeps repeated views, nodules and derived crops together according to the study protocol; do not put names or identifiers in public artifacts.
+
+```csv
+path,group
+benign/case001.png,case-001
+malignant/case002.png,case-002
+```
+
+This abbreviated example is a schema, not enough data for three partitions. Each class needs at least three independent components.
 
 ```bash
-python -m thyroid_poc.ensemble split-data artifacts/model-a.keras artifacts/model-b.keras
+python -m thyroid_poc.data dataset split-data --groups groups.csv --seed 42
+python -m thyroid_poc.train split-data --architecture alexnet --epochs 30 --output artifacts/alexnet.keras
+# Optional ImageNet download, only when explicitly requested:
+python -m thyroid_poc.train split-data --architecture inception_v3 --pretrained --output artifacts/inception.keras
+python -m thyroid_poc.evaluate artifacts/alexnet.keras split-data --output artifacts/alexnet-test.json
+python -m thyroid_poc.ensemble split-data artifacts/alexnet.keras artifacts/inception.keras --output artifacts/ensemble-test.json
 ```
 
-## Research documentation
+`--independent-images` is an explicit alternative only for genuinely independent examples, such as the synthetic fixtures. It is **not a shortcut for unknown patient grouping**. Byte hashing cannot detect differently encoded, cropped or augmented copies; identify them through the group mapping. Apply augmentation only after splitting.
 
-- [Model card](MODEL_CARD.md)
-- [Data statement](DATA.md)
-- [Proof-of-concept journal](docs/proof-of-concept-journal.pdf)
+Every model requires its `.metadata.json` sidecar. Evaluation checks model bytes, class order, dataset fingerprint and overlap with training/validation hashes. It processes manifest rows in fixed order and saves each sample's ID, hash, group, label and model probabilities. ROC AUC uses probabilities; undefined metrics are `null`. Thresholds must be selected before test evaluation. Reports refuse overwrite. The evaluator intentionally accepts only the recorded dataset; a separate external-validation protocol is not implemented.
 
-## Limitations
+## Historical study
 
-- Retrospective proof-of-concept evaluation on a public dataset
-- No prospective clinical study or external hospital validation is represented here
-- Possible sensitivity to ultrasound device, acquisition protocol and dataset composition
-- No subgroup analysis was available in the retained experiment
-- Accuracy alone is inadequate for clinical deployment
+| Archived experiment | Reported accuracy | Evaluation images | Interpretation |
+|---|---:|---:|---|
+| Cropped-image ensemble | 0.88 | 502 | Evaluation reused fine-tuning images |
+| Uncropped-image ensemble | 0.93 | 482 | Evaluation reused fine-tuning images |
 
-## Data governance
+The [original journal](docs/proof-of-concept-journal.pdf), pages 4 and 6, explicitly describes this overlap. These are **historical in-sample figures, not held-out test accuracy**. Some archived ROC AUC calculations used thresholded class predictions instead of continuous probabilities; the archived AUC values should not be read as a validated ranking-performance estimate. Different cohorts also prevent a controlled cropped-versus-uncropped comparison.
 
-Confirm institutional and collaborator permission before sharing any hospital data or derived private material.
+![Historical uncropped classification report; includes training overlap](results/uncropped-ensemble-classification-report.png)
+
+The historical images/PDF are retained as research records. Their original captions and terminology have not been rewritten. Later private experiments are not included here, and the maintained pipeline has not been used to establish a new ultrasound result. This project taught me that split integrity and traceable predictions matter as much as model architecture.
+
+## Boundaries
+
+This is educational research software, **not a diagnostic, screening or triage system**. No prospective clinical study, external hospital validation, calibration guarantee or subgroup fairness evaluation is represented. Exact dataset version, label provenance, grouping and rights remain prerequisites for a legitimate new experiment. Reproducible seeds do not guarantee bit-identical training across hardware or library versions.
+
+The existing [all-rights-reserved licence](LICENSE) is unchanged. No raw data, trained clinical models or additional private research documents are published here.

@@ -20,3 +20,9 @@ artifacts/
 *.xml
 *.dcm
 
+
+.runtime/
+*-validation.log
+groups.csv
+manifest.json
+*.metadata.json

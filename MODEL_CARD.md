@@ -1,29 +1,23 @@
-# Model card
+# Model card: research software, no released clinical model
 
-## Model details
+## What is available
 
-Binary image-classification proof of concept comparing custom AlexNet-style and transfer-learning CNNs, with experiments combining model probabilities into an ensemble.
+Source code for binary AlexNet-style, InceptionV3 and InceptionResNetV2 models, group-aware dataset preparation, model metadata and per-sample individual/ensemble evaluation. No trained weights are distributed. Class order is dataset-specific and recorded explicitly; output is the probability of index 1.
 
 ## Intended use
 
-- Educational reproduction of the research pipeline
-- Exploration of preprocessing, CNN training and ensemble evaluation
-- Documentation of applied machine-learning research
+Educational review of CNN experiments and reproducible ML software. A legitimate study requires verified data rights, label semantics, grouping and an appropriate evaluation protocol. The maintained code was tested on generated images only.
 
-## Out-of-scope use
+## Historical results
 
-- Diagnosis, screening, triage or treatment recommendations
-- Use on hospital data without governance and validation
-- Claims of performance beyond the documented experiment
+Archived cropped/uncropped accuracies of 0.88/0.93 used 502/482 evaluation images with fine-tuning overlap, as stated on pages 4 and 6 of the journal. They are in-sample historical summaries, not held-out estimates. Some historical AUC values were computed from hard predictions. Do not attach these results to the maintained implementation or treat them as clinical evidence.
 
-## Training and evaluation data
+The historical report describes four models; this repository reconstructs three architectures with different code and preprocessing. Its random-weight, synthetic smoke tests measure software correctness only. There is no newly established medical performance result.
 
-The retained experiment used public/Kaggle ultrasound images organized into benign and malignant classes. The data is not redistributed here. Exact dataset provenance and licence must be confirmed before public release.
+## Evaluation contract
 
-## Metrics
+Models accept RGB float32 pixels in [0,255]; model layers own normalization. Training uses only train/validation partitions for fitting and early stopping. Evaluation requires the recorded manifest and model sidecar, rejects known train/validation overlap, and saves sample-level probabilities, hashes and ordered labels. Probability AUC, class precision/recall/F1, sensitivity/specificity, Brier score and log loss accompany a labelled confusion matrix. Undefined quantities are null. Ensemble probabilities use an unweighted mean. Model/threshold selection must happen before looking at the test results.
 
-The retained reports include precision, recall, F1, confusion matrices, accuracy and ROC AUC. One cropped-image experiment reported 0.88 accuracy and 0.882 AUC; one uncropped-image experiment reported 0.93 accuracy and 0.925 AUC.
+## Out-of-scope use and limitations
 
-## Limitations and risks
-
-The archive does not contain the evidence required to claim clinical generalization, calibration across hospitals or equitable performance across demographic and equipment subgroups. Ultrasound-image classification can be affected by acquisition conditions, labelling practice, prevalence and dataset leakage. Any future clinical study requires independent validation, governance and qualified medical oversight.
+No diagnosis, screening, triage or treatment recommendations. No hospital deployment, prospective study, external validation, patient-level independence, calibration across sites, fairness or demographic/device subgroup result is demonstrated. Exact public-data provenance is unresolved; see [DATA.md](DATA.md). Manifest checks cannot repair incorrect group IDs or label definitions. Clinical use would require separate governance, expert oversight and independent validation.

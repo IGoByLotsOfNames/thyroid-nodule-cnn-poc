@@ -1,4 +1,2 @@
-"""Reproducible training and evaluation utilities for the thyroid-nodule proof of concept."""
-
-__version__ = "1.0.0"
-
+"""thyroid_poc: binary vision experiments with explicit provenance."""
+__version__ = "2.0.0"

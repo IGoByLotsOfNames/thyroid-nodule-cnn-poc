@@ -45,10 +45,10 @@ def transfer_model(
         weights="imagenet" if pretrained else None,
         input_shape=input_shape,
     )
-    base.trainable = False
+    base.trainable = not pretrained
     inputs = layers.Input(shape=input_shape)
-    x = tf.keras.applications.inception_v3.preprocess_input(inputs)
-    x = base(x, training=False)
+    x = layers.Rescaling(1.0 / 127.5, offset=-1)(inputs)
+    x = base(x, training=False) if pretrained else base(x)
     x = layers.GlobalAveragePooling2D()(x)
     x = layers.Dropout(0.3)(x)
     x = layers.Dense(128, activation="relu")(x)
@@ -56,8 +56,8 @@ def transfer_model(
     return Model(inputs, outputs, name=f"{architecture}_binary")
 
 
-def build_model(name: str, input_shape: tuple[int, int, int] = (224, 224, 3)) -> Model:
+def build_model(name: str, input_shape: tuple[int, int, int] = (224, 224, 3), *, pretrained: bool = True) -> Model:
     if name == "alexnet":
         return alexnet(input_shape)
-    return transfer_model(name, input_shape)
+    return transfer_model(name, input_shape, pretrained=pretrained)
 

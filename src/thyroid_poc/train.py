@@ -1,47 +1,55 @@
 from __future__ import annotations
-
 import argparse
 import json
-import random
 from pathlib import Path
-
-import numpy as np
-import tensorflow as tf
-
-from .data import image_datasets
-from .models import build_model
+from .artifacts import metadata_path, save_metadata
+from .data import dataset, validate_manifest
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Train a thyroid-nodule binary classifier")
-    parser.add_argument("data", type=Path, help="Directory containing train/validation/test")
-    parser.add_argument("--architecture", choices=("alexnet", "inception_v3", "inception_resnet_v2"), default="inception_v3")
-    parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--batch-size", type=int, default=32)
+def train_model(root, output, *, architecture="alexnet", epochs=30, batch_size=32,
+                seed=42, pretrained=False, size=(224, 224)):
+    import tensorflow as tf
+    from .models import build_model
+    if architecture == "alexnet" and pretrained:
+        raise ValueError("The AlexNet-style model has no pretrained weights")
+    root, output = Path(root), Path(output)
+    if output.suffix != ".keras" or epochs <= 0 or batch_size <= 0:
+        raise ValueError("Use a .keras output and positive epochs/batch size")
+    history_path = output.with_suffix(".history.json")
+    if any(p.exists() for p in (output, metadata_path(output), history_path)):
+        raise FileExistsError("Choose a fresh model path")
+    manifest = validate_manifest(root)
+    tf.keras.utils.set_random_seed(seed)
+    tf.config.experimental.enable_op_determinism()
+    train = dataset(root, manifest, "train", size, batch_size, shuffle=True, seed=seed)
+    validation = dataset(root, manifest, "validation", size, batch_size)
+    model = build_model(architecture, (*size, 3), pretrained=pretrained)
+    model.compile(optimizer=tf.keras.optimizers.Adam(1e-4), loss="binary_crossentropy",
+                  metrics=["accuracy", tf.keras.metrics.AUC(name="auc")])
+    history = model.fit(train, validation_data=validation, epochs=epochs,
+                        callbacks=[tf.keras.callbacks.EarlyStopping(patience=5, restore_best_weights=True)], shuffle=False, verbose=2)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    model.save(output)
+    history_path.write_text(json.dumps(history.history, indent=2), encoding="utf-8")
+    save_metadata(output, manifest, size=size, architecture=architecture, seed=seed,
+                  extra=dict(epochs_requested=epochs, epochs_completed=len(history.history["loss"]),
+                             batch_size=batch_size, pretrained=pretrained, tensorflow=tf.__version__,
+                             keras=tf.keras.__version__, deterministic_ops=True))
+    return model
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Train without using test labels for selection")
+    parser.add_argument("data", type=Path)
+    parser.add_argument("--architecture", choices=("alexnet", "inception_v3", "inception_resnet_v2"), default="alexnet")
+    parser.add_argument("--pretrained", action="store_true", help="Explicitly allow ImageNet weights download for Inception")
+    parser.add_argument("--epochs", type=int, default=30); parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=Path("artifacts/model.keras"))
     args = parser.parse_args()
-
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    tf.random.set_seed(args.seed)
-    train, validation, _ = image_datasets(args.data, (224, 224), args.batch_size, args.seed)
-    model = build_model(args.architecture)
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
-        loss="binary_crossentropy",
-        metrics=["accuracy", tf.keras.metrics.AUC(name="auc")],
-    )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    callbacks = [
-        tf.keras.callbacks.EarlyStopping(patience=5, restore_best_weights=True),
-        tf.keras.callbacks.ModelCheckpoint(args.output, save_best_only=True),
-    ]
-    history = model.fit(train, validation_data=validation, epochs=args.epochs, callbacks=callbacks)
-    history_path = args.output.with_suffix(".history.json")
-    history_path.write_text(json.dumps(history.history, indent=2), encoding="utf-8")
+    train_model(args.data, args.output, architecture=args.architecture, epochs=args.epochs,
+                batch_size=args.batch_size, seed=args.seed, pretrained=args.pretrained)
 
 
 if __name__ == "__main__":
     main()
-

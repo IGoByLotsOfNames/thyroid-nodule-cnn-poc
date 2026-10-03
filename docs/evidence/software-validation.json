@@ -1,0 +1,70 @@
+{
+  "verified_on": "2026-10-03",
+  "platform": "Windows x64 CPU",
+  "python": "3.12.14",
+  "runtime": {
+    "tensorflow": "2.20.0",
+    "keras": "3.15.1",
+    "numpy": "2.2.6",
+    "pillow_full": "12.0.0",
+    "pillow_core": "12.3.0",
+    "ruff": "0.16.10",
+    "coverage": "7.16.2"
+  },
+  "full_suite": {
+    "collected": 110,
+    "passed": 109,
+    "skipped": 1,
+    "seconds": 208.347,
+    "skip_reason": "Native Windows symlink creation was unavailable; simulated guard passed."
+  },
+  "core_suite": {
+    "collected": 110,
+    "passed": 104,
+    "skipped": 6,
+    "seconds": 35.432,
+    "tensorflow_present": false,
+    "skip_reason": "Five opt-in TensorFlow integrations and the native Windows symlink test."
+  },
+  "coverage": {
+    "covered_lines": 1350,
+    "num_statements": 1447,
+    "percent_covered": 91.2914398812469,
+    "percent_covered_display": "91.29",
+    "missing_lines": 97,
+    "excluded_lines": 0,
+    "percent_statements_covered": 93.29647546648238,
+    "percent_statements_covered_display": "93.30",
+    "num_branches": 574,
+    "num_partial_branches": 77,
+    "covered_branches": 495,
+    "missing_branches": 79,
+    "percent_branches_covered": 86.2369337979094,
+    "percent_branches_covered_display": "86.24"
+  },
+  "coverage_scope": "All 12 thyroid_poc modules, demo.py and both demo_support modules; subprocess coverage combined; zero excluded source lines. The 90% floor is combined statement and branch coverage.",
+  "checks": [
+    "Full synthetic suite passed",
+    "TensorFlow-free core suite passed",
+    "Ruff lint passed",
+    "Ruff format passed",
+    "Dependency checks passed in both environments"
+  ],
+  "source_sha256": {
+    "__init__.py": "824ec1fc57051c182ae01a4af12abd05fed04dc2eed4d11bffd911d420ee3239",
+    "artifacts.py": "cd82b9de0be338822a3d91161c319d8ee1bad9d5d3be7f9f0e25c4ea18b7e158",
+    "data.py": "45889f32ae59030e8469ed69675211ae9ae9f9192b8fc45c91fd24b3b36e4cc9",
+    "ddti.py": "51ae6a9e6d2d4695977b321c5befb232bb878ad4217835d2a1983badd71b479b",
+    "ensemble.py": "770592ed1a95c7c5d858a76d348d08238b9b9c93e99128415ecc8fa415f318c9",
+    "evaluate.py": "07220834abfb80f346a347527efab63e7cddba239a4a27cd21563e6eed8ad956",
+    "experiment.py": "d66d13693d85c93a7b6ed4528c83943aebf609a24d1a7b2eadbb1ddb889159b6",
+    "measurement.py": "553a7a090b79198e3bb123d221314f243d7aac2d8cc1aefa53745d861a123c59",
+    "metrics.py": "deeb541323df227e140fe3ff4ba7a3d8a3a50d8fc738fa681b52b18f4497fe37",
+    "models.py": "34c548954e3f1119e0dd6a87d51481749d7f5fbfe68ec5be6238f911b2845a7e",
+    "selection.py": "3b0e6cc345184dde518f1973d71cdbc4e2638323d43588121d8c98e27144f63b",
+    "train.py": "0b5834e5f1b6972e6535dbb8320a7cc48f482df350f2e3b75ec4eb23b7726228"
+  },
+  "source_matches_completed_experiment": true,
+  "measurement_boundary": "Only synthetic images are fitted by these tests. No medical-data retraining or new medical inference occurred during integration verification.",
+  "hosted_ci": "Not inferred from local results; consult the workflow run for the exact public commit."
+}

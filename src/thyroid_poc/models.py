@@ -56,8 +56,9 @@ def transfer_model(
     return Model(inputs, outputs, name=f"{architecture}_binary")
 
 
-def build_model(name: str, input_shape: tuple[int, int, int] = (224, 224, 3), *, pretrained: bool = True) -> Model:
+def build_model(
+    name: str, input_shape: tuple[int, int, int] = (224, 224, 3), *, pretrained: bool = True
+) -> Model:
     if name == "alexnet":
         return alexnet(input_shape)
     return transfer_model(name, input_shape, pretrained=pretrained)
-

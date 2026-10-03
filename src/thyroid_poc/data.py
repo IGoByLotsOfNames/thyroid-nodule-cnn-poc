@@ -1,4 +1,5 @@
 """Manifest-based binary image splitting. No TensorFlow import is needed here."""
+
 from __future__ import annotations
 
 import argparse
@@ -26,7 +27,12 @@ def digest(path: Path) -> str:
 
 def safe_path(root: Path, relative: str) -> Path:
     p = PurePosixPath(relative)
-    if not relative or "\\" in relative or p.is_absolute() or any(x in ("..", ".", "") for x in relative.split("/")):
+    if (
+        not relative
+        or "\\" in relative
+        or p.is_absolute()
+        or any(x in ("..", ".", "") for x in relative.split("/"))
+    ):
         raise ValueError(f"Unsafe relative path: {relative!r}")
     result = root.joinpath(*p.parts)
     if not result.resolve().is_relative_to(root.resolve()):
@@ -43,25 +49,108 @@ def read_groups(path: Path) -> dict[str, str]:
             raise ValueError("Group CSV must have exactly path,group columns")
         result = {}
         for row in reader:
+            if None in row or any(row.get(field) is None for field in ("path", "group")):
+                raise ValueError("Group CSV rows must have exactly path,group values")
             key, group = row["path"], row["group"].strip()
-            if not group or key in result:
-                raise ValueError("Group IDs must be nonempty and paths unique")
+            if not key.strip() or not group or key in result:
+                raise ValueError("Group paths and IDs must be nonempty and paths unique")
             result[key] = group
         return result
 
 
 def manifest_fingerprint(manifest: dict) -> str:
-    return hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def _fingerprint(rows: list[dict]) -> str:
     content = [{key: r[key] for key in ("source", "sha256", "group", "label")} for r in rows]
-    return hashlib.sha256(json.dumps(content, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(content, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
-def create_split(source: Path, destination: Path, *, groups: dict[str, str] | None = None,
-                 independent_images: bool = False, train: float = .70,
-                 validation: float = .15, seed: int = 42) -> dict:
+def group_support(rows: list[dict]) -> dict:
+    """Count images and connected group/hash components; not independent patients.
+
+    A declared group links all its images. Shared byte hashes can connect separate
+    declared groups transitively. Counts are derived afresh, not trusted from a
+    stored total. Mixed-label groups are allowed and no input rows are changed.
+    """
+    parent = list(range(len(rows)))
+
+    def find(index):
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    seen_group, seen_hash = {}, {}
+    for index, row in enumerate(rows):
+        for field, registry in (("group", seen_group), ("sha256", seen_hash)):
+            value = row.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"Invalid {field} for support counting")
+            if value in registry:
+                parent[find(index)] = find(registry[value])
+            registry[value] = index
+    return {
+        "image_count": len(rows),
+        "declared_group_count": len(seen_group),
+        "duplicate_connected_component_count": len({find(i) for i in range(len(rows))}),
+        "metric_unit": "image",
+        "note": "Connected groups are not verified independent patients.",
+    }
+
+
+def _validate_cohort_provenance(cohort: dict, rows: list[dict], classes: list[str]) -> None:
+    """Bind the imported annotation record to every actual split source image."""
+    from .ddti import TARGET_SCHEMA, TIRADS_LABELS, cohort_fingerprint
+
+    if (
+        cohort.get("schema_version") != 1
+        or cohort.get("kind") != "ddti_imported_cohort"
+        or cohort.get("cohort_fingerprint") != cohort_fingerprint(cohort)
+        or cohort.get("target_schema") != TARGET_SCHEMA
+        or cohort.get("class_names") != classes
+    ):
+        raise ValueError("Invalid or changed DDTI cohort provenance")
+    cohort_rows = cohort.get("rows")
+    if not isinstance(cohort_rows, list) or len(cohort_rows) != len(rows):
+        raise ValueError("Cohort must cover exactly the split source rows")
+    expected = {}
+    for row in cohort_rows:
+        tirads, label = row.get("tirads"), row.get("label")
+        if (
+            not isinstance(tirads, str)
+            or tirads not in TIRADS_LABELS
+            or type(label) is not int
+            or TIRADS_LABELS[tirads] != label
+        ):
+            raise ValueError("Cohort TIRADS annotations do not match their binary labels")
+        if row["path"] in expected:
+            raise ValueError("Repeated cohort source identity")
+        expected[row["path"]] = tuple(row[key] for key in ("group", "label", "sha256", "size"))
+    actual = {
+        row["source"]: tuple(row[key] for key in ("group", "label", "sha256", "size"))
+        for row in rows
+    }
+    if actual != expected:
+        raise ValueError("Cohort labels, groups or image bytes do not match the split")
+
+
+def create_split(
+    source: Path,
+    destination: Path,
+    *,
+    groups: dict[str, str] | None = None,
+    independent_images: bool = False,
+    train: float = 0.70,
+    validation: float = 0.15,
+    seed: int = 42,
+    cohort_manifest: Path | None = None,
+) -> dict:
     """Copy into new output, keeping connected groups/byte duplicates together.
 
     Ratios are approximate because groups are indivisible. Each split must contain
@@ -70,7 +159,9 @@ def create_split(source: Path, destination: Path, *, groups: dict[str, str] | No
     """
     source, destination = Path(source).resolve(), Path(destination).absolute()
     if destination.exists():
-        raise FileExistsError("Destination already exists; choose a fresh path (never merge splits)")
+        raise FileExistsError(
+            "Destination already exists; choose a fresh path (never merge splits)"
+        )
     if destination.resolve().is_relative_to(source) or source.is_relative_to(destination.resolve()):
         raise ValueError("Source and destination must not contain each other")
     ratios = (train, validation, 1 - train - validation)
@@ -92,20 +183,34 @@ def create_split(source: Path, destination: Path, *, groups: dict[str, str] | No
                 group = relative if independent_images else groups.get(relative)
                 if not group:
                     raise ValueError(f"Missing group for {relative}")
-                rows.append(dict(source=relative, group=group, label=label,
-                                 sha256=digest(path), size=path.stat().st_size))
+                rows.append(
+                    dict(
+                        source=relative,
+                        group=group,
+                        label=label,
+                        sha256=digest(path),
+                        size=path.stat().st_size,
+                    )
+                )
     if not rows or set(r["label"] for r in rows) != {0, 1}:
         raise ValueError("Both classes need supported images")
     if groups is not None and set(groups) != {r["source"] for r in rows}:
         raise ValueError("Group CSV must cover exactly the supported image paths")
+    cohort = None
+    if cohort_manifest is not None:
+        cohort = json.loads(Path(cohort_manifest).read_text(encoding="utf-8"))
+        _validate_cohort_provenance(cohort, rows, classes)
     parent = list(range(len(rows)))
+
     def find(i):
         while parent[i] != i:
             parent[i] = parent[parent[i]]
             i = parent[i]
         return i
+
     def union(i, j):
         parent[find(i)] = find(j)
+
     seen_group, seen_hash = {}, {}
     for i, row in enumerate(rows):
         if row["group"] in seen_group:
@@ -130,24 +235,42 @@ def create_split(source: Path, destination: Path, *, groups: dict[str, str] | No
     targets = [[totals[label] * ratio for label in (0, 1)] for ratio in ratios]
     for unit in units:
         added = Counter(r["label"] for r in unit)
+
         def cost(index):
             coverage = sum(counts[index][label] == 0 for label in added)
-            change = sum(((counts[index][label] + added[label] - targets[index][label]) ** 2
-                          - (counts[index][label] - targets[index][label]) ** 2)
-                         / targets[index][label] for label in (0, 1))
+            change = sum(
+                (
+                    (counts[index][label] + added[label] - targets[index][label]) ** 2
+                    - (counts[index][label] - targets[index][label]) ** 2
+                )
+                / targets[index][label]
+                for label in (0, 1)
+            )
             return (-coverage, change, index)
+
         chosen = min(range(3), key=cost)
         for row in unit:
             row["split"] = SPLITS[chosen]
             row["path"] = f"{row['split']}/{row['source']}"
             counts[chosen][row["label"]] += 1
     if any(0 in count for count in counts):
-        raise ValueError("Cannot produce class-complete partitions; review grouping or add independent groups")
-    manifest = dict(schema_version=1, seed=seed, class_names=classes,
-                    requested_ratios=dict(zip(SPLITS, ratios)),
-                    grouping="explicit" if groups is not None else "asserted_independent_images",
-                    duplicate_policy="exact_bytes_connected_with_groups", rows=rows,
-                    source_fingerprint=_fingerprint(rows))
+        raise ValueError(
+            "Cannot produce class-complete partitions; review grouping or add independent groups"
+        )
+    manifest = dict(
+        schema_version=1,
+        seed=seed,
+        class_names=classes,
+        requested_ratios=dict(zip(SPLITS, ratios)),
+        grouping="explicit" if groups is not None else "asserted_independent_images",
+        duplicate_policy="exact_bytes_connected_with_groups",
+        rows=rows,
+        source_fingerprint=_fingerprint(rows),
+    )
+    if cohort is not None:
+        # Self-contained provenance: the full manifest hash in model metadata now
+        # also identifies the XML revision, exclusions and target derivation.
+        manifest["cohort_provenance"] = cohort
     destination.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".split-", dir=destination.parent))
     try:
@@ -172,7 +295,12 @@ def validate_manifest(root: Path) -> dict:
     root = Path(root)
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     classes, rows = manifest["class_names"], manifest["rows"]
-    if manifest.get("schema_version") != 1 or len(classes) != 2 or len(set(classes)) != 2 or not rows:
+    if (
+        manifest.get("schema_version") != 1
+        or len(classes) != 2
+        or len(set(classes)) != 2
+        or not rows
+    ):
         raise ValueError("Invalid binary dataset manifest")
     paths, sources, groups, hashes, hash_labels, coverage = set(), set(), {}, {}, {}, set()
     for row in rows:
@@ -182,11 +310,17 @@ def validate_manifest(root: Path) -> dict:
         if not isinstance(row["group"], str) or not row["group"]:
             raise ValueError("Invalid group ID")
         source_parts = PurePosixPath(row["source"]).parts
-        if not source_parts or source_parts[0] != classes[label] or row["path"] != f"{split}/{row['source']}":
+        if (
+            not source_parts
+            or source_parts[0] != classes[label]
+            or row["path"] != f"{split}/{row['source']}"
+        ):
             raise ValueError("Class/path mapping does not match the manifest")
         if row["path"] in paths or row["source"] in sources:
             raise ValueError("Repeated sample identity")
-        paths.add(row["path"]); sources.add(row["source"]); coverage.add((split, label))
+        paths.add(row["path"])
+        sources.add(row["source"])
+        coverage.add((split, label))
         for key, registry in ((row["group"], groups), (row["sha256"], hashes)):
             if key in registry and registry[key] != split:
                 raise ValueError("Group or exact duplicate crosses a split boundary")
@@ -195,13 +329,23 @@ def validate_manifest(root: Path) -> dict:
             raise ValueError("Identical images have conflicting labels")
         hash_labels[row["sha256"]] = label
         path = safe_path(root, row["path"])
-        if not path.is_file() or path.stat().st_size != row["size"] or digest(path) != row["sha256"]:
+        if (
+            not path.is_file()
+            or path.stat().st_size != row["size"]
+            or digest(path) != row["sha256"]
+        ):
             raise ValueError(f"Missing or changed sample: {row['path']}")
-    actual = {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file() and p != root / "manifest.json"}
+    actual = {
+        p.relative_to(root).as_posix()
+        for p in root.rglob("*")
+        if p.is_file() and p != root / "manifest.json"
+    }
     if actual != paths or coverage != {(s, label) for s in SPLITS for label in (0, 1)}:
         raise ValueError("Untracked files or incomplete class coverage")
     if manifest["source_fingerprint"] != _fingerprint(rows):
         raise ValueError("Source fingerprint mismatch")
+    if "cohort_provenance" in manifest:
+        _validate_cohort_provenance(manifest["cohort_provenance"], rows, classes)
     return manifest
 
 
@@ -209,43 +353,82 @@ def load_rgb(path: Path, size: tuple[int, int]):
     """RGB float32 [0,255], bilinear resize; normalization lives in the model."""
     import numpy as np
     from PIL import Image
+
     with Image.open(path) as image:
-        return np.asarray(image.convert("RGB").resize((size[1], size[0]), Image.Resampling.BILINEAR), dtype=np.float32)
+        return np.asarray(
+            image.convert("RGB").resize((size[1], size[0]), Image.Resampling.BILINEAR),
+            dtype=np.float32,
+        )
 
 
-def dataset(root: Path, manifest: dict, split: str, size: tuple[int, int], batch_size: int,
-            *, shuffle: bool = False, seed: int = 42):
+def dataset(
+    root: Path,
+    manifest: dict,
+    split: str,
+    size: tuple[int, int],
+    batch_size: int,
+    *,
+    shuffle: bool = False,
+    seed: int = 42,
+):
     import numpy as np
     import tensorflow as tf
+
     if batch_size <= 0 or split not in SPLITS:
         raise ValueError("Invalid batch size or split")
     rows = [r for r in manifest["rows"] if r["split"] == split]
+
     def generate():
         for row in rows:
             yield load_rgb(root / row["path"], size), np.asarray([row["label"]], dtype=np.float32)
-    ds = tf.data.Dataset.from_generator(generate, output_signature=(
-        tf.TensorSpec((*size, 3), tf.float32), tf.TensorSpec((1,), tf.float32)))
+
+    ds = tf.data.Dataset.from_generator(
+        generate,
+        output_signature=(tf.TensorSpec((*size, 3), tf.float32), tf.TensorSpec((1,), tf.float32)),
+    )
     if shuffle:
         ds = ds.shuffle(len(rows), seed=seed)
     options = tf.data.Options()
     options.threading.private_threadpool_size = 1
-    ds = ds.batch(batch_size).apply(tf.data.experimental.assert_cardinality(math.ceil(len(rows) / batch_size)))
+    ds = ds.batch(batch_size).apply(
+        tf.data.experimental.assert_cardinality(math.ceil(len(rows) / batch_size))
+    )
     return ds.with_options(options).prefetch(1)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path); parser.add_argument("destination", type=Path)
+    parser.add_argument("source", type=Path)
+    parser.add_argument("destination", type=Path)
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--groups", type=Path); group.add_argument("--independent-images", action="store_true")
+    group.add_argument("--groups", type=Path)
+    group.add_argument("--independent-images", action="store_true")
+    parser.add_argument(
+        "--cohort-manifest", type=Path, help="Bind an imported DDTI cohort.json to this split"
+    )
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--train", type=float, default=.70)
-    parser.add_argument("--validation", type=float, default=.15)
+    parser.add_argument("--train", type=float, default=0.70)
+    parser.add_argument("--validation", type=float, default=0.15)
     args = parser.parse_args()
-    manifest = create_split(args.source, args.destination, groups=read_groups(args.groups) if args.groups else None,
-                            independent_images=args.independent_images, seed=args.seed, train=args.train, validation=args.validation)
-    print(json.dumps({"source_fingerprint": manifest["source_fingerprint"],
-                      "counts": dict(Counter(r["split"] for r in manifest["rows"]))}, indent=2))
+    manifest = create_split(
+        args.source,
+        args.destination,
+        groups=read_groups(args.groups) if args.groups else None,
+        independent_images=args.independent_images,
+        seed=args.seed,
+        train=args.train,
+        validation=args.validation,
+        cohort_manifest=args.cohort_manifest,
+    )
+    print(
+        json.dumps(
+            {
+                "source_fingerprint": manifest["source_fingerprint"],
+                "counts": dict(Counter(r["split"] for r in manifest["rows"])),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

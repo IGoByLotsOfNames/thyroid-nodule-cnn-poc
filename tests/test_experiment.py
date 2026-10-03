@@ -25,7 +25,7 @@ class ExperimentTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="experiment fixtures ")
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        self.root = Path(temporary.name).resolve()
         image_fixture(self.root / "source")
         self.data = self.root / "split data"
         self.manifest = create_split(self.root / "source", self.data, independent_images=True)

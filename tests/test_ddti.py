@@ -38,7 +38,7 @@ class DDTIImportTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.source = self.root / "source"
         self.source.mkdir()
         case(self.source, 12, "2", {1: jpeg((10, 20, 30)), 11: jpeg((30, 20, 10))})

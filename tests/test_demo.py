@@ -44,7 +44,7 @@ class DemoTests(unittest.TestCase):
         self.fixture, self.recorded, self.fixture_hash = demo.load_examples()
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
 
     def checkout(self):
         root = self.root / "checkout"

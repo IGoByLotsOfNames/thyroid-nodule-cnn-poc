@@ -13,6 +13,33 @@ dependencies = ["numpy>=2,<2.3", "Pillow>=12,<13"]
 
 [project.optional-dependencies]
 runtime = ["tensorflow==2.20.0", "keras==3.15.1"]
+dev = ["ruff==0.16.10", "coverage[toml]==7.16.2"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+required-version = "==0.16.10"
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["thyroid_poc", "demo", "demo_support"]
+relative_files = true
+patch = ["subprocess"]
+parallel = true
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_empty = true
+fail_under = 90

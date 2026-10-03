@@ -26,3 +26,14 @@ artifacts/
 groups.csv
 manifest.json
 *.metadata.json
+
+# Local quality reports and caches
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.json
+coverage.xml
+htmlcov/
+
+# Generated local demonstrations
+demo-output/

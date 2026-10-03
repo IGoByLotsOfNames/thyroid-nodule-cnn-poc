@@ -1,0 +1,4 @@
+# Source and fixture hashes identify exact bytes; preserve them on every OS.
+* -text
+*.png binary
+*.pdf binary

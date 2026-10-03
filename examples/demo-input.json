@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "kind": "hand_authored_synthetic_predictions",
+  "notice": "All images are generated geometric colour tiles. Probabilities are hand-authored examples, not CNN outputs or ultrasound evidence.",
+  "class_names": [
+    "synthetic_blue",
+    "synthetic_red"
+  ],
+  "samples": [
+    {
+      "source": "synthetic_blue/0.png",
+      "group": "synthetic-0-0",
+      "label": 0,
+      "split": "train",
+      "sha256": "e1fa12039ca25103603bbf41438881c54cf3ed7bf482d6eb347a99918ce26518"
+    },
+    {
+      "source": "synthetic_blue/1.png",
+      "group": "synthetic-0-1",
+      "label": 0,
+      "split": "train",
+      "sha256": "96b4b698d73bfa2355fbca0cdbe799adcdfcf02e5220bd9784e7a2db93df265c"
+    },
+    {
+      "source": "synthetic_blue/2.png",
+      "group": "synthetic-0-2",
+      "label": 0,
+      "split": "train",
+      "sha256": "a2c8ae1445b4c9cc3eaf1ae055ab4b1c0f73a1a8c3c3f5c09049271e8882fb26"
+    },
+    {
+      "source": "synthetic_blue/3.png",
+      "group": "synthetic-0-3",
+      "label": 0,
+      "split": "train",
+      "sha256": "60d366459e8275f82e0e91e97bbe63b22580b662f6a359e290fb309a5a7c9b98"
+    },
+    {
+      "source": "synthetic_blue/4.png",
+      "group": "synthetic-0-4",
+      "label": 0,
+      "split": "validation",
+      "sha256": "375509092af74e92799e072dd65e80237c53cb223289f66b7b822cf54153038c",
+      "probability": 0.55
+    },
+    {
+      "source": "synthetic_blue/5.png",
+      "group": "synthetic-0-5",
+      "label": 0,
+      "split": "validation",
+      "sha256": "3e2b3d7ea27c64507aeddba540099dc46a256d394ec6aabf79addf6b0ea62118",
+      "probability": 0.6
+    },
+    {
+      "source": "synthetic_blue/6.png",
+      "group": "synthetic-0-6",
+      "label": 0,
+      "split": "test",
+      "sha256": "52ca9db0b0df775730f3647216ba2bdc611735f802f738353e3a2c3f4bc68bbe",
+      "probability": 0.58
+    },
+    {
+      "source": "synthetic_blue/7.png",
+      "group": "synthetic-0-7",
+      "label": 0,
+      "split": "test",
+      "sha256": "3c7be10b813c3a5f9713168749ca5d57846f639d9ec16f2d829149f49c7bbeb6",
+      "probability": 0.78
+    },
+    {
+      "source": "synthetic_red/0.png",
+      "group": "synthetic-1-0",
+      "label": 1,
+      "split": "train",
+      "sha256": "eaccacbe63ab4a642b6c57c91ff89cbf61fc822b0338b8e477c6f2c4062fba7a"
+    },
+    {
+      "source": "synthetic_red/1.png",
+      "group": "synthetic-1-1",
+      "label": 1,
+      "split": "train",
+      "sha256": "617db4b499504ea09b8851a6774dd65e22503275f00d1b4523fec4fd47f9add4"
+    },
+    {
+      "source": "synthetic_red/2.png",
+      "group": "synthetic-1-2",
+      "label": 1,
+      "split": "train",
+      "sha256": "30b63be4e0521a8dd079db1edd4afb498b3897e44f0c012a6b9e13ba80973ffa"
+    },
+    {
+      "source": "synthetic_red/3.png",
+      "group": "synthetic-1-3",
+      "label": 1,
+      "split": "train",
+      "sha256": "669e865622909093af72b9bc9338d69152ae0570457442f1b61edbf461a40dfd"
+    },
+    {
+      "source": "synthetic_red/4.png",
+      "group": "synthetic-1-4",
+      "label": 1,
+      "split": "validation",
+      "sha256": "40f5c4bf400b068ed790193c464e2eb4448b8fd823ea52db3c415fb6a699ac90",
+      "probability": 0.7
+    },
+    {
+      "source": "synthetic_red/5.png",
+      "group": "synthetic-1-5",
+      "label": 1,
+      "split": "validation",
+      "sha256": "7df1afe7911124690e695797489d3b8230a3f6bfd02e577259d1e3f4f8009627",
+      "probability": 0.85
+    },
+    {
+      "source": "synthetic_red/6.png",
+      "group": "synthetic-1-6",
+      "label": 1,
+      "split": "test",
+      "sha256": "84277ce70f1be49e6f1936d2a6b88c33ef2a9194e7cbaeffa9c688a51dade7af",
+      "probability": 0.72
+    },
+    {
+      "source": "synthetic_red/7.png",
+      "group": "synthetic-1-7",
+      "label": 1,
+      "split": "test",
+      "sha256": "fa943da8680e3ef929238fbf7a3fae9bd6864d48335ae8a05c442c1ed8d2092d",
+      "probability": 0.88
+    }
+  ]
+}

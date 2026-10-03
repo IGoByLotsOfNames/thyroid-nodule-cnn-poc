@@ -1,34 +1,104 @@
-name: Pipeline tests
-on: [push, pull_request]
+name: Pipeline quality and tests
+
+on: [push, pull_request, workflow_dispatch]
+
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONNOUSERSITE: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
 jobs:
-  contracts:
+  quality:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python: ["3.11", "3.12"]
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
         with:
-          python-version: ${{ matrix.python }}
-      - run: python -m pip install -e .
-      - run: python -m unittest discover -s tests -v
-  synthetic-runtime:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    env:
-      RUN_ML_TESTS: "1"
-      TF_ENABLE_ONEDNN_OPTS: "0"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+          persist-credentials: false
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -r requirements-runtime.txt
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip check
+      - run: python -m ruff check src tests demo.py demo_support
+      - run: python -m ruff format --check src tests demo.py demo_support
+
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - run: python -m pip install -e .
-      - run: python -m unittest discover -s tests -v
+      - run: python -m pip check
+      - name: Confirm optional runtime is absent
+        run: python -c "import importlib.util; assert importlib.util.find_spec('tensorflow') is None"
+      - run: python -B -m unittest discover -s tests -v
+
+  synthetic-runtime:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      COVERAGE_RCFILE: ${{ github.workspace }}/pyproject.toml
+      COVERAGE_FILE: ${{ github.workspace }}/.coverage
+      RUN_ML_TESTS: "1"
+      TF_ENABLE_ONEDNN_OPTS: "0"
+      TF_CPP_MIN_LOG_LEVEL: "2"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-runtime.txt
+      - run: python -m pip install -r requirements-runtime.txt
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip check
+      - name: Run synthetic suite with branch and subprocess coverage
+        run: python -m coverage run -m unittest discover -s tests -v
+      - name: Combine coverage including command-line subprocesses
+        if: always()
+        run: python -m coverage combine
+      - name: Save XML and JSON coverage
+        if: always()
+        run: |
+          python -m coverage xml --fail-under=0 -o coverage.xml
+          python -m coverage json --fail-under=0 -o coverage.json
+      - name: Enforce coverage floor
+        if: always()
+        run: python -m coverage report
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-${{ matrix.os }}-py312
+          path: |
+            coverage.xml
+            coverage.json
+          if-no-files-found: warn
+          retention-days: 14
